@@ -1,16 +1,24 @@
 <template>
   <div id="home">
     <nav-bar class="home-nav"></nav-bar>
+    <v-tab-control 
+        class="tabControl-ss" 
+        ref="tabControlEl_a"
+        v-show="isShowTabControl"
+        :tabControlData="['流行', '新款', '精选']"
+        @tabCut="goodsCut"></v-tab-control>
     <scroll 
       class="mans" 
       ref="elScroll" 
       :probeCode="3" 
+      :pullUpLoad="true"
       @coordsMonitor="getCoordsHandle"
-      @pullingUp="pullingUPHandle">
+      @pullingUp="loadGoodsListPage"
+      >
       <van-swipe class="my-swipe"  indicator-color="white">
         <van-swipe-item v-for="(item, inx) in bannerList" :key='inx'>
           <a href="#">
-            <van-image lazy-load :src="item.image" />
+            <van-image lazy-load :src="item.image" @load="swipeImageLoad"/>
           </a>
         </van-swipe-item>
       </van-swipe>
@@ -18,6 +26,7 @@
       <v-special></v-special>
       <v-tab-control 
         class="tabControl" 
+        ref="tabControlEl_b"
         :tabControlData="['流行', '新款', '精选']"
         @tabCut="goodsCut"></v-tab-control>
       <v-goods-list :goodsData="goods[currentPro].list"></v-goods-list>
@@ -27,7 +36,8 @@
 </template>
 
 <script>
-import {getHomeMultidata, getHomeGoods} from 'network/home.js';
+import { getHomeMultidata, getHomeGoods } from 'network/home.js';
+import { debounce } from '../../common/utils';
 
 import NavBar from 'common/navbar/NavBar';
 import Scroll from 'common/scroll/scrollPiece';
@@ -60,7 +70,11 @@ export default {
         'sell': {page: 0, list: []}
       },
       currentPro: 'pop',
-      isShowBackTop: false
+      isShowBackTop: false,
+      tabControlOffset: 0,
+      recordTbCtOffset_y: 0,
+      isLoad: false,
+      isShowTabControl: false
     }
   },
   methods: {
@@ -100,35 +114,85 @@ export default {
         case 2:
           this.currentPro = 'sell';
           break
-      }
+      };
+      this.$refs.tabControlEl_a.curtB = inx;
+      this.$refs.tabControlEl_b.curtB = inx
     },
     // 回顶事件
     backTopHandle () {
       this.$refs.elScroll.scrollHandle(0, 0)
     },
-    // backtop坐标，决定显示隐藏
+    // 监听滚动的坐标 
     getCoordsHandle (coodrVal) {
+      // backtop坐标，决定显示隐藏
       this.isShowBackTop = Math.abs(coodrVal.y) > 1000 ? true : false
+      // tabControl的offsetTop 与 滚动距离判断，来决定是否要吸顶
+      this.isShowTabControl = Math.abs(coodrVal.y) > this.tabControlOffset 
     },
-    // 下拉加载更多
-    pullingUPHandle () {
-      this.getHomeGoods_A(this.currentPro);
-      this.$refs.elScroll.scrollw.refresh() // refresh()方法是当页面加载数据重新计算滚动内容高度。(解决某时滚动出现卡顿不可滚的情况)
+    // 监听上拉加载下一页
+    loadGoodsListPage () {
+      this.getHomeGoods_A(this.currentPro)
+    },
+    // 监听图片加载完成，去获取 tabControlEl 的 offsetTop 才是准确的顶部距离
+    swipeImageLoad () {
+      // 这里我们 isLoad定义状态true/false,通过判断不让它多次(产生多次是根据图片有几张来的)获取 tabControlEl的offsetTop
+      if (!this.isLoad) {
+        this.tabControlOffset = this.$refs.tabControlEl_b.$el.offsetTop;
+        this.isLoad = true
+      }
+
     }
+
+    // 防抖debounce()/节流throttle() --有时间研究一下
+    // 封装一个防抖函数，让 this.$refs.elScroll.refresh() 不频繁的调用（频繁调用影响性能）
+    // 这里的防抖动 再utils.js 文件中封装起来了，
+    // debounce (func, delay) {
+    //   let timer = null;
+    //   return function (...args) {
+    //     if (timer) clearTimeout(timer);
+    //     timer = setTimeout(() => {
+    //       func.apply(this, args)
+    //     }, delay)
+    //   }
+    // }
   
   },
   
   // 生命周期
-  created () {
+  mounted () {
     // 请求多个数据
     this.getHomeMultidata_A();
     
     // 请求商品数据
     this.getHomeGoods_A('pop');
     this.getHomeGoods_A('new');
-    this.getHomeGoods_A('sell')
+    this.getHomeGoods_A('sell');
+    
+    // 下面 debounce()传入this.$refs.elScroll.refresh参数，debounce()它的回调函数赋给 refresh
+    //  this.$bus.$on()里头就去调用 refresh() 回调函数
+    // const refresh = this.debounce(this.$refs.elScroll.refresh, 200);
 
+    // 这里的 debounce防抖动方法是在utils.js文件中封装起来的，现在已引入就地使用
+    const refresh = debounce(this.$refs.elScroll.refresh, 200);
+
+    // 接收 goodsListItem页面发出来的事件，是通过$bus中线事件中转这么一个东西来接受goodsListItem发出来的事件
+    this.$bus.$on('itemImageLoadEvent', () => {
+      // this.$refs.elScroll.refresh()
+      refresh()
+    })
   },
+  // 组件使用了 keep-alive 缓存标签时, activated 生命周期函数 才会别触发， 它是进入时触发
+  activated () {
+    // 当第二次进入home组件时，this.recordTbCtOffset_y就已经记录第一滚动的高度了
+    // 接着将它传入 scrollHandle() 方法里头，scrollHandle()是scrollTo() 的封装
+    this.$refs.elScroll.scrollHandle(0, this.recordTbCtOffset_y, 0);
+    this.$refs.elScroll.refresh() // 再次刷一下
+  },
+  // 组件使用了 keep-alive 缓存标签时, deactivated 生命周期函数 才会别触发, 它是离开时触发
+  deactivated () {
+    // 离开当前组件记录滚动的高度 , 赋值给 this.recordTbCtOffset_y
+    this.recordTbCtOffset_y = this.$refs.elScroll.scroll.y
+  }
 }
 </script>
 
@@ -167,6 +231,11 @@ export default {
     .yewls {
       height: 300px;
       overflow: hidden;
+    }
+    .tabControl-ss {
+      position: relative;
+      z-index: 3;
+      background-color: #fff
     }
     
   }

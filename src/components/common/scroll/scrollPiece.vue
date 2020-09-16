@@ -15,44 +15,50 @@ export default {
     probeCode: {
       type: Number,
       default: 0
+    },
+    pullUpLoad: {
+      type: Boolean,
+      default: false
     }
   },
   data () { 
     return {
-      scrollw: null
+      scroll: null
     }
   },
   methods: {
+    // 将 scrollHandle 封装起来，其它页使用时直接调用
     scrollHandle (x,y, seconds=300) {
-      this.scrollw.scrollTo(x, y, seconds)
+      // 下面this.scroll是来判断是否为空，空就后面不会再执行下去
+      this.scroll && this.scroll.scrollTo(x, y, seconds)
     },
-    
-    // scroll再次加载 finishPullUp(),在这里是封装起来，home页面去调用
+    // 将 refresh 将封装起来 ，其它页使用时直接调用
+    refresh () {
+      // refresh() 是来解决，scroll滚动区域中的图片完全加载完成后，重新计算scroll区域中能滚动的高度，这样一来就可以解决scroll滚动图片的卡顿情况
+      this.scroll && this.scroll.refresh()  // 下面this.scroll是来判断是否为空，空就后面不会再执行下去
+    },
+    // 这里是封装 scroll里头的 finishPullUp() ,home页面直接调用
     finishPullUp () {
-      this.scrollw.finishPullUp()
+      this.scroll && this.scroll.finishPullUp()
     }
-
   },
   /**
    * 以下是生命周期
    */
   mounted () {
-    // this.$nextTick(() => {
-      // 以下定义的bscroll属性决定要开启的对应功能
-      this.scrollw = new BScroll(this.$refs.mains, {
+      this.scroll = new BScroll(this.$refs.mains, {
           click: true,
           probeType: this.probeCode, //通过probeCode外面传来数字 1或 2或 3（代表开启监听滚动）
-          pullUpLoad: true
+          pullUpLoad: this.pullUpLoad
       }),
-      // bscroll 得到滚动的坐标（y）值
-      this.scrollw.on('scroll', (position) => {
+      // 监听 bscroll滚动位置 得到的坐标（y）值
+      this.scroll.on('scroll', (position) => {
         this.$emit('coordsMonitor', position)
       }),
-      // bscroll 触发下拉加载事件
-      this.scrollw.on('pullingUp', () => {
+      // 上拉加载更多，向外触发可监听的事件
+      this.scroll.on('pullingUp', () => {
         this.$emit('pullingUp')
       })
-    // })
   }
 }
 </script>

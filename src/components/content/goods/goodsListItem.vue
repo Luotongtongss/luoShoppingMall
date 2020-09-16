@@ -1,14 +1,7 @@
 <template>
   <div class="goodsListItem">
-    <!-- <div class="imgBox">
-      <img :src="goodsItem.show.img" alt="">
-    </div>
-    <div class="content">
-      <p>{{ goodsItem.title }}</p>
-      <span class="price">{{ goodsItem.price }}</span>
-      <span class="collect">{{ goodsItem.cfav }}</span>
-    </div> -->
-    <img :src="goodsItem.show.img" alt="">
+    <!--这里的 @load是监听图片的事件-->
+    <img :src="goodsItem.show.img" alt="" @load="imageLoad">
     <div class="content">
       <p>{{ goodsItem.title }}</p>
       <span class="price">{{ goodsItem.price }}</span>
@@ -30,6 +23,12 @@ export default {
   },
   data () {
     return {}
+  },
+  methods: {
+    // 图片加载完，就会向外传出 事件itemImageLoadEvent，在home页面可以通过 this.$bus.$on('itemImageLoadEvent', ()=>{}),接收
+    imageLoad () {
+      this.$bus.$emit('itemImageLoadEvent')
+    }
   }
 }
 </script>
